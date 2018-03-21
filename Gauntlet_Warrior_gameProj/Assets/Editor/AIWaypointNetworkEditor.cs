@@ -2,89 +2,114 @@
 using System.Collections;
 using UnityEditor;
 
-// used to create custom editor// the editor will need 
-//to be typecasted to recognize the type of data we need @param AIWaypointNetwork
-[CustomEditor (typeof (AIWaypointNetwork))]
-
-public class AIWaypointNetworkEditor : Editor
+// ------------------------------------------------------------------------------------
+// CLASS	:	AIWaypointNetworkEditor
+// DESC		:	Custom Inspector and Scene View Rendering for the AIWaypointNetwork
+//				Component
+// ------------------------------------------------------------------------------------
+[CustomEditor(typeof(AIWaypointNetwork))]
+public class AIWaypointNetworkEditor : Editor 
 {
-    // override must be provided to override the OnInspectorGui()
-    public override void OnInspectorGUI()
-    {
-        // this will set the ai waypoint targets to a varb
-        AIWaypointNetwork network = (AIWaypointNetwork)target;
+	// --------------------------------------------------------------------------------
+	// Name	:	OnInspectorGUI (Override)
+	// Desc	:	Called by Unity Editor when the Inspector needs repainting for an
+	//			AIWaypointNetwork Component
+	// --------------------------------------------------------------------------------
+	public override void OnInspectorGUI()
+	{
+		// Get reference to selected component
+		AIWaypointNetwork network = (AIWaypointNetwork)target;
+	
+		// Show the Display Mode Enumeration Selector
+		network.DisplayMode = (PathDisplayMode)EditorGUILayout.EnumPopup ( "Display Mode", network.DisplayMode );
+	
+		// If we are in Paths display mode then display the integer sliders for the Start and End waypoint indices
+		if (network.DisplayMode==PathDisplayMode.Paths)
+		{
+			network.UIStart		= EditorGUILayout.IntSlider ( "Waypoint Start" , network.UIStart, 0, network.Waypoints.Count-1);
+			network.UIEnd		= EditorGUILayout.IntSlider ( "Waypoint End" , network.UIEnd, 0, network.Waypoints.Count-1);
+		}
 
-        network.DisplayMode = (PathDisplayMode)EditorGUILayout.EnumPopup("Display Mode:  ", network.DisplayMode);
+		// Tell Unity to do its default drawing of all serialized members that are NOT hidden in the inspector
+		DrawDefaultInspector();
 
-        if (network.DisplayMode == PathDisplayMode.PATH)
-        {
-            network.UIStart = EditorGUILayout.IntSlider("Waypoint Start Path:  ", network.UIStart, 0, network.Waypoints.Count - 1);
-            network.UIEnd = EditorGUILayout.IntSlider("Waypoint End Path: ", network.UIEnd, 0, network.Waypoints.Count - 1);
-        }
-        // this will draw the current default inspector
-        DrawDefaultInspector();
-    }
+		if (GUI.changed) 
+			EditorUtility.SetDirty(target);
+	}
 
-    void OnSceneGUI()
-    {
-        // this will set the ai waypoint targets to a varb
-        AIWaypointNetwork network = (AIWaypointNetwork)target;
 
-        // loop through all the pts in the list and output a labe to each of the targets
-        for (int i = 0; i + 1 < network.Waypoints.Count; i++)
-        {
-            if (network.Waypoints[i] != null)
-                Handles.Label(network.Waypoints[i].position, "Waypoints " + i.ToString());
-        }
+	// --------------------------------------------------------------------------------
+	// Name	:	OnSceneGUI
+	// Desc	:	Implementing this functions means the Unity Editor will call it when
+	//			the Scene View is being repainted. This gives us a hook to do our
+	//			own rendering to the scene view.
+	// --------------------------------------------------------------------------------
+	void OnSceneGUI()
+	{
+		// Get a reference to the component being rendered
+		AIWaypointNetwork network = (AIWaypointNetwork)target;
 
-        if (network.DisplayMode == PathDisplayMode.CONNECTIONS)
-        {
-            // container array of line points// hold the network count// will use + 1 to loop from the 0 index to last index
-            // make a line that loop around
-            Vector3[] linePoints = new Vector3[network.Waypoints.Count + 1];
+		// Fetch all waypoints from the network and render a label for each one
+		for(int i=0; i<network.Waypoints.Count;i++)
+		{
+			if (network.Waypoints[i]!=null)
+				Handles.Label ( network.Waypoints[i].position, "Waypoint "+i.ToString ());
+		}
 
-            for (int i = 0; i <= network.Waypoints.Count; i++)
-            {
-                // this will assign the index to i
-                // if i does NOT EQUAL index of i then will equal 0
-                int index = i != network.Waypoints.Count ? i : 0;
+		// If we are in connections mode then we will to draw lines
+		// connecting all waypoints
+		if (network.DisplayMode == PathDisplayMode.Connections)
+		{
+			// Allocate array of vector to store the polyline positions
+			Vector3 [] linePoints = new Vector3[ network.Waypoints.Count+1 ];
 
-                // as long as the waypoint are not null
-                if (network.Waypoints[index] != null)
-                {
-                    // set each position at each index
-                    // then store them to line pts array at index i
-                    linePoints[i] = network.Waypoints[index].position;
-                }
-                else
-                {
-                    // else the point that is null
-                    // line size will be set to math inf so it will draw a complete line through the stage
-                    // we will see that we have a problem on screen
-                    linePoints[i] = new Vector3(Mathf.Infinity, Mathf.Infinity, Mathf.Infinity);
-                }
+			// Loop through each waypoint + one additional interation
+			for(int i=0; i<=network.Waypoints.Count;i++)
+			{
+				// Calculate the waypoint index with wrap-around in the
+				// last loop iteration
+				int index = i!=network.Waypoints.Count ? i : 0; 
 
-                // handles the color and drawing the poly line
-                Handles.color = Color.green;
-                Handles.DrawPolyLine(linePoints);
-            }
-        }
-        else if (network.DisplayMode == PathDisplayMode.PATH)
-        {
-            NavMeshPath path = new NavMeshPath();
+				// Fetch the position of the waypoint for this iteration and
+				// copy into our vector array.
+				if (network.Waypoints[index]!=null)
+					linePoints[i] = network.Waypoints[index].position;
+				else
+					linePoints[i] = new Vector3(Mathf.Infinity, Mathf.Infinity, Mathf.Infinity);
+			}
 
-            if (network.Waypoints[network.UIEnd] != null && network.Waypoints[network.UIEnd] != null)
-            {
-                Vector3 fromStart = network.Waypoints[network.UIStart].position;
-                Vector3 toEnd = network.Waypoints[network.UIEnd].position;
+			// Set the Handle color to Cyan
+			Handles.color = Color.cyan;
 
-                NavMesh.CalculatePath(fromStart, toEnd, NavMesh.AllAreas, path);
+			// Render the polyline in the scene view by passing in our list of waypoint positions
+			Handles.DrawPolyLine ( linePoints );
+		}
+		else
+		// We are in paths mode so to proper navmesh path search and render result
+		if (network.DisplayMode == PathDisplayMode.Paths)
+		{
+			// Allocate a new NavMeshPath
+			UnityEngine.AI.NavMeshPath path 	= new UnityEngine.AI.NavMeshPath();
 
-                Handles.color = Color.blue;
-                Handles.DrawPolyLine(path.corners);
-            }
-        }
-    }
+			// Assuming both the start and end waypoint indices selected are ligit
+			if (network.Waypoints[network.UIStart]!=null && network.Waypoints[network.UIEnd]!=null)
+			{
+				// Fetch their positions from the waypoint network
+				Vector3 from 		= network.Waypoints[network.UIStart].position;
+				Vector3 to			= network.Waypoints[network.UIEnd].position;
 
-    
+				// Request a path search on the nav mesh. This will return the path between
+				// from and to vectors
+				UnityEngine.AI.NavMesh.CalculatePath ( from, to, UnityEngine.AI.NavMesh.AllAreas, path );
+
+				// Set Handles color to Yellow
+				Handles.color = Color.yellow;
+
+				// Draw a polyline passing int he path's corner points
+				Handles.DrawPolyLine( path.corners );
+			}
+		}
+		
+	}
+
 }
